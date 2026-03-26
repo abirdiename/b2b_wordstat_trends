@@ -1,3 +1,9 @@
+class WordstatAPIError(Exception):
+    def __init__(self, status_code, message):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+        
 from flask import Flask, request, jsonify
 import os
 import requests
@@ -98,7 +104,7 @@ def normalize_phrase_for_dynamics(phrase: str) -> str:
 def call_wordstat_dynamics(phrase: str, period: str, from_date: str, to_date: str):
     url = f"{WORDSTAT_BASE_URL}/v1/dynamics"
     headers = {
-        "Content-type": "application/json;charset=utf-8",
+        "Content-Type": "application/json; charset=utf-8",
         "Authorization": f"Bearer {WORDSTAT_TOKEN}",
     }
     payload = {
@@ -108,9 +114,20 @@ def call_wordstat_dynamics(phrase: str, period: str, from_date: str, to_date: st
         "toDate": to_date,
     }
 
+    print("=== WORDSTAT REQUEST ===")
+    print("URL:", url)
+    print("Token exists:", bool(WORDSTAT_TOKEN))
+    print("Token prefix:", WORDSTAT_TOKEN[:12] + "..." if WORDSTAT_TOKEN else "EMPTY")
+    print("Payload:", payload)
+
     r = requests.post(url, json=payload, headers=headers, timeout=30)
+
+    print("=== WORDSTAT RESPONSE ===")
+    print("Status:", r.status_code)
+    print("Body:", r.text)
+
     if r.status_code != 200:
-        raise RuntimeError(f"Wordstat error {r.status_code}: {r.text}")
+        raise WordstatAPIError(r.status_code, r.text)
 
     return r.json()
 
@@ -181,9 +198,10 @@ def wordstat_proxy():
         out = [{"date": d, "value": summed[d]} for d in sorted(summed.keys())]
         return jsonify(out)
 
+       except WordstatAPIError as e:
+        return jsonify({"error": e.message}), e.status_code
     except Exception as e:
-        # Важно: отдаём текст ошибки в ответ, чтобы было понятно, что сломалось
-        return jsonify({"error": str(e)}), 502
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
